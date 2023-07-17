@@ -14,9 +14,9 @@ model User {
   bans  Int @default(0) @db.SmallInt
 
   steamID BigInt? @unique(map: "user_steamID") @db.BigInt // Optional because placeholders don't have SteamIDs
-  alias   String  @db.VarChar(64)
-  avatar  String? @db.VarChar(255)
-  country String? @db.VarChar(2)
+  alias   String
+  avatar  String?
+  country String?
 
   userAuth          UserAuth?
   profile           Profile?
@@ -27,18 +27,20 @@ model User {
   mapLibraryEntries MapLibraryEntry[]
   mapRanks          Rank[]
   mapReviews        MapReview[]
+  mapReviewComments MapReviewComment[]
   activities        Activity[]
-  follows           Follow[]          @relation("follow_follow")
-  followers         Follow[]          @relation("follow_follower")
+  follows           Follow[]           @relation("follow_follow")
+  followers         Follow[]           @relation("follow_follower")
   mapNotifies       MapNotify[]
   notifications     Notification[]
   runSessions       RunSession[]
   runs              Run[]
-  reportSubmitted   Report[]          @relation("report_submitter")
-  reportResolved    Report[]          @relation("report_resolver")
+  reportSubmitted   Report[]           @relation("report_submitter")
+  reportResolved    Report[]           @relation("report_resolver")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  MapTestingRequest MapTestingRequest[]
 
   @@index([steamID])
 }
@@ -46,7 +48,7 @@ model User {
 model Profile {
   id Int @id @default(autoincrement())
 
-  bio String @default("") @db.VarChar(1000)
+  bio String @default("")
 
   user   User @relation(fields: [userID], references: [id], onDelete: Cascade)
   userID Int  @unique
@@ -135,9 +137,9 @@ model Report {
   data              BigInt   @db.BigInt
   type              Int      @db.SmallInt
   category          Int      @db.SmallInt
-  message           String?  @db.VarChar(1000)
+  message           String?
   resolved          Boolean? @default(false)
-  resolutionMessage String?  @db.VarChar(1000)
+  resolutionMessage String?
 
   submitter   User? @relation("report_submitter", fields: [submitterID], references: [id], onDelete: SetNull)
   submitterID Int?
@@ -155,7 +157,7 @@ model Report {
 model UserAuth {
   id Int @id @default(autoincrement())
 
-  refreshToken String? @db.VarChar(255)
+  refreshToken String?
 
   user   User @relation(fields: [userID], references: [id], onDelete: Cascade)
   userID Int  @unique
@@ -169,8 +171,8 @@ model UserAuth {
 model Map {
   id Int @id @default(autoincrement())
 
-  name    String  @db.VarChar(32)
-  fileKey String? @db.VarChar(255)
+  name    String
+  fileKey String?
   type    Int     @default(0) @db.SmallInt
   status  Int     @db.SmallInt
   hash    String? @db.Char(40)
@@ -181,24 +183,27 @@ model Map {
   submitter   User? @relation(fields: [submitterID], references: [id], onDelete: SetNull)
   submitterID Int?
 
-  stats MapStats?
-  info  MapInfo?
+  stats      MapStats?
+  info       MapInfo?
+  submission MapSubmission?
 
   mainTrack   MapTrack? @relation("map_maintrack", fields: [mainTrackID], references: [id], onDelete: SetNull)
   mainTrackID Int?      @unique
 
-  credits        MapCredit[]
-  favorites      MapFavorite[]
-  images         MapImage[]
-  libraryEntries MapLibraryEntry[]
-  notifies       MapNotify[]
-  ranks          Rank[]
-  reviews        MapReview[]
-  tracks         MapTrack[]
-  runs           Run[]
+  credits         MapCredit[]
+  favorites       MapFavorite[]
+  images          MapImage[]
+  libraryEntries  MapLibraryEntry[]
+  notifies        MapNotify[]
+  ranks           Rank[]
+  reviews         MapReview[]
+  tracks          MapTrack[]
+  runs            Run[]
+  testingRequests MapTestingRequest[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  MapSubmissionVersion MapSubmissionVersion[]
 
   @@index([submitterID])
 }
@@ -253,8 +258,8 @@ model MapImage {
 model MapInfo {
   id Int @id @default(autoincrement())
 
-  description  String   @default("") @db.VarChar(1000)
-  youtubeID    String?  @db.VarChar(11)
+  description  String   @default("")
+  youtubeID    String?
   numTracks    Int      @db.SmallInt
   creationDate DateTime
 
@@ -298,23 +303,6 @@ model MapNotify {
   @@id([userID, mapID])
   @@unique([userID, mapID], map: "mapnotify_unique")
   @@index([userID, mapID])
-}
-
-model MapReview {
-  id Int @id @default(autoincrement())
-
-  text String @db.VarChar(1000)
-
-  map   Map @relation(fields: [mapID], references: [id], onDelete: Cascade)
-  mapID Int
-
-  reviewer   User @relation(fields: [reviewerID], references: [id], onDelete: Cascade)
-  reviewerID Int
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([mapID, reviewerID])
 }
 
 model MapTrack {
@@ -471,8 +459,8 @@ model Run {
   tickRate Float  @db.Real
   time     Float  @db.Real
   flags    Int
-  file     String @db.VarChar(255)
-  hash     String @db.VarChar(40)
+  file     String
+  hash     String
 
   rank Rank?
 
@@ -564,6 +552,94 @@ model Rank {
   updatedAt DateTime @updatedAt
 
   @@index([runID, userID])
+}
+
+enum MapSubmissionType {
+  PORT
+  ORIGINAL
+  SPECIAL
+}
+
+model MapTestingRequest {
+  mapID Int
+  map   Map @relation(fields: [mapID], references: [id], onDelete: Cascade)
+
+  userID Int
+  user   User @relation(fields: [userID], references: [id], onDelete: Cascade)
+
+  accepted Boolean
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([mapID, userID])
+}
+
+model MapSubmission {
+  map   Map @relation(fields: [mapID], references: [id], onDelete: Cascade)
+  mapID Int
+
+  type MapSubmissionType @default(ORIGINAL)
+
+  suggestions Json @default("{}") // MapSubmissionSuggestionsModel
+
+  versions MapSubmissionVersion[]
+
+  currentVersion   MapSubmissionVersion? @relation(name: "current_version", fields: [currentVersionID], references: [id])
+  currentVersionID String                @unique
+
+  @@id([mapID])
+}
+
+model MapSubmissionVersion {
+  id String @id @default(uuid()) // BSP file stored relative to this
+
+  currentVersion MapSubmission? @relation(name: "current_version")
+
+  map   Map @relation(fields: [mapID], references: [id], onDelete: Cascade)
+  mapID Int
+
+  versionNum Int    @db.SmallInt
+  changelog  String
+
+  submission   MapSubmission @relation(fields: [submissionID], references: [mapID])
+  submissionID Int
+
+  @@index([mapID])
+}
+
+// This model will be greatly expanded in future to include screenshots, replays, etc.
+model MapReview {
+  id Int @id @default(autoincrement())
+
+  comment     String
+  comments    MapReviewComment[]
+  suggestions Json               @default("{}") // MapSubmissionSuggestionsModel
+  resolved    Boolean
+
+  map   Map @relation(fields: [mapID], references: [id], onDelete: Cascade)
+  mapID Int
+
+  user   User @relation(fields: [userID], references: [id], onDelete: Cascade)
+  userID Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MapReviewComment {
+  id Int @id @default(autoincrement())
+
+  comment String
+
+  user   User @relation(fields: [userID], references: [id], onDelete: Cascade)
+  userID Int
+
+  review   MapReview @relation(fields: [reviewID], references: [id], onDelete: Cascade)
+  reviewID Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model XpSystems {
