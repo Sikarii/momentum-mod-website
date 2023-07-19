@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AuthService } from './auth.service';
 import { Observable, of, ReplaySubject, Subject } from 'rxjs';
-import { CookieService } from 'ngx-cookie-service';
 import {
   Follow,
   FollowStatus,
@@ -28,28 +27,27 @@ import { HttpService } from './http.service';
 
 @Injectable({ providedIn: 'root' })
 export class LocalUserService {
-  public localUser: User;
+  public localUser?: User;
   private localUserSubject: Subject<User>;
 
   constructor(
     private authService: AuthService,
-    private cookieService: CookieService,
     private http: HttpService
   ) {
     this.localUserSubject = new ReplaySubject<User>(1);
-    const userCookieExists = this.cookieService.check('user');
-    if (userCookieExists) {
-      const userCookie = decodeURIComponent(this.cookieService.get('user'));
-      localStorage.setItem('user', userCookie);
-      this.cookieService.delete('user', '/');
-    }
-    const user = localStorage.getItem('user') as string;
 
-    // TODO: Handle this properly - redirect to login?
+    const user = localStorage.getItem('user');
+    if (!user) {
+      this.refreshLocal();
+      return;
+    }
+
     // if (!user) throw new Error('fuck');
 
-    this.localUser = JSON.parse(user);
-    this.localUserSubject.next(this.localUser);
+    const localUser = JSON.parse(user);
+
+    this.localUser = localUser;
+    this.localUserSubject.next(localUser);
     this.refreshLocal();
   }
 
@@ -73,12 +71,12 @@ export class LocalUserService {
     this.authService.logout();
   }
 
-  public hasRole(role: Role, user: User = this.localUser): boolean {
-    return user.roles ? Bitflags.has(user.roles, role) : false;
+  public hasRole(role: Role, user: User | undefined = this.localUser): boolean {
+    return user?.roles ? Bitflags.has(user.roles, role) : false;
   }
 
-  public hasBan(ban: Ban, user: User = this.localUser): boolean {
-    return user.bans ? Bitflags.has(user.bans, ban) : false;
+  public hasBan(ban: Ban, user: User | undefined = this.localUser): boolean {
+    return user?.bans ? Bitflags.has(user.bans, ban) : false;
   }
 
   public getLocalUser(query?: UsersGetQuery): Observable<User> {

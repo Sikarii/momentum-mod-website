@@ -27,7 +27,7 @@ export class JwtGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const token = this.extractTokenFromHeader(request);
+    const token = this.extractTokenFromHeader(request) ?? this.extractTokenFromCookie(request);
 
     if (!token) {
       throw new UnauthorizedException();
@@ -40,6 +40,11 @@ export class JwtGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private extractTokenFromCookie(request: FastifyRequest): string | undefined {
+    const cookie = request.cookies.accessToken;
+    return cookie;
   }
 
   private extractTokenFromHeader(request: FastifyRequest): string | undefined {

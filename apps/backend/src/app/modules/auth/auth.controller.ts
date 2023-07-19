@@ -1,5 +1,4 @@
 import {
-  Body,
   Controller,
   Get,
   HttpCode,
@@ -52,11 +51,11 @@ export class AuthController {
       domain: this.configService.get('domain'),
       // The value on the cookies gets transferred to local storage immediately,
       // so just use a short lifetime of 10s.
-      maxAge: 10000,
+      maxAge: this.configService.get('jwt.expTime'),
       path: '/',
       // So frontend can access. Cookie is deleted immediately so never
       // retrurned to the backend, so no CSRF risk.
-      httpOnly: false
+      httpOnly: true
     };
   }
 
@@ -79,15 +78,16 @@ export class AuthController {
   @UseGuards(SteamWebGuard)
   @ApiOperation({ summary: 'Assigns a JWT using OpenID data from Steam login' })
   async steamWebAuthReturn(
-    @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply,
     @LoggedInUser() user
   ) {
     const jwt = await this.authService.loginWeb(user);
 
     res.setCookie('accessToken', jwt.accessToken, this.cookieOptions);
-    res.setCookie('refreshToken', jwt.refreshToken, this.cookieOptions);
-    res.setCookie('user', JSON.stringify(user), this.cookieOptions);
+    res.setCookie('refreshToken', jwt.refreshToken, {
+      ...this.cookieOptions,
+      maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days, TODO: should this be in the config
+    });
   }
 
   @Post('/game')
@@ -122,8 +122,18 @@ export class AuthController {
     type: JWTResponseWebDto,
     description: 'Refreshed web tokens'
   })
-  refreshToken(@Body() body: RefreshTokenDto) {
-    return this.authService.refreshRefreshToken(body.refreshToken);
+  async refreshToken(
+    @Req() req,
+    @Res({ passthrough: true }) res: FastifyReply
+  ) {
+    const refreshToken = req.cookies.refreshToken;
+    const jwt = await this.authService.refreshRefreshToken(refreshToken);
+
+    res.setCookie('accessToken', jwt.accessToken, this.cookieOptions);
+
+    // TODO: This should not be necessary as soon as frontend
+    // code does not rely on this anymore
+    return jwt;
   }
 
   @Post('/revoke')
@@ -131,10 +141,15 @@ export class AuthController {
   @ApiOperation({ summary: 'Revokes the given token' })
   @ApiBody({ type: RefreshTokenDto })
   @ApiNoContentResponse()
-  async revokeToken(@Req() req) {
-    // If passed JwtGuard, `authorization` must be in headers.
-    const accessToken = req.headers.authorization.replace('Bearer ', '');
-    await this.authService.revokeRefreshToken(accessToken);
+  async revokeToken(
+    @Req() req,
+    @Res({ passthrough: true }) res: FastifyReply,
+  ) {
+    const refreshToken = req.cookies.refreshToken;
+    await this.authService.revokeRefreshToken(refreshToken);
+
+    res.clearCookie('accessToken', this.cookieOptions);
+    res.clearCookie('refreshToken', this.cookieOptions);
   }
 
   //#endregion

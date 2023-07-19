@@ -5,8 +5,8 @@ import {
   HttpEvent,
   HttpInterceptor
 } from '@angular/common/http';
-import { BehaviorSubject, EMPTY, Observable, throwError } from 'rxjs';
-import { catchError, filter, switchMap, take } from 'rxjs/operators';
+import { EMPTY, Observable, throwError } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '@momentum/frontend/data';
 import { env } from '@momentum/frontend/env';
 import { DOCUMENT } from '@angular/common';
@@ -25,14 +25,12 @@ export class AuthInterceptor implements HttpInterceptor {
   private readonly standardPorts = ['80', '443'];
 
   private refreshInProgress: boolean;
-  private refreshTokenSubject: BehaviorSubject<string | null>;
 
   constructor(
     @Inject(DOCUMENT) private document: Document,
     private readonly authService: AuthService
   ) {
     this.refreshInProgress = false;
-    this.refreshTokenSubject = new BehaviorSubject<string | null>(null);
   }
 
   intercept(
@@ -42,16 +40,6 @@ export class AuthInterceptor implements HttpInterceptor {
     // We obviously don't want to do auth to any server besides our own.
     if (!this.isAllowedDomain(req)) {
       return next.handle(req);
-    }
-
-    // Add bearer token to any request to backend. `accessToken` should be
-    // defined here, to pass the AuthGuard the user should have a token in LS.
-    // In future, with public pages, we some stuff won't need an access token,
-    // but that should affect this code - those endpoints won't 401 without a
-    // token.
-    const accessToken = this.authService.getAccessToken();
-    if (accessToken) {
-      req = this.addAccessTokenToHeader(req, accessToken);
     }
 
     return next.handle(req).pipe(
@@ -88,17 +76,16 @@ export class AuthInterceptor implements HttpInterceptor {
     // First request:
     if (!this.refreshInProgress) {
       this.refreshInProgress = true;
-      this.refreshTokenSubject.next(null);
+
       return this.authService.refreshAccessToken().pipe(
         // By catching the inner observable (that's returned by `next.handle`),
         // in catchError (that happened above in `intercept`) we unsubscribe to
         // it, then we wait to we get a non-null token and switchMap will
         // *resubscribe* to the inner observable, firing a new request.
         // Gotta love RxJS.
-        switchMap((token: string) => {
+        switchMap(() => {
           this.refreshInProgress = false;
-          this.refreshTokenSubject.next(token);
-          return next.handle(this.addAccessTokenToHeader(req, token));
+          return next.handle(req.clone());
         }),
 
         // The refresh token endpoint 401ed, so it's expired/invalid. Just call
@@ -122,18 +109,7 @@ export class AuthInterceptor implements HttpInterceptor {
     // Subsequent requests:
     // Wait til valid new token is emitted, then use the
     // same `switchMap` approach to repeat.
-    return this.refreshTokenSubject.pipe(
-      filter((token) => token !== null),
-      take(1),
-      switchMap((token) => next.handle(this.addAccessTokenToHeader(req, token)))
-    );
-  }
-
-  private addAccessTokenToHeader(
-    req: HttpRequest<any>,
-    token: string
-  ): HttpRequest<any> {
-    return req.clone({ setHeaders: { Authorization: 'Bearer ' + token } });
+    return next.handle(req.clone());
   }
 
   // Simplified version of

@@ -83,7 +83,8 @@ export class HttpService {
         params: this.handleQuery(options?.query),
         observe: options?.observe,
         responseType: options?.responseType,
-        reportProgress: options?.reportProgress
+        reportProgress: options?.reportProgress,
+        withCredentials: true,
       }
     );
   }
