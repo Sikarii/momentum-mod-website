@@ -38,7 +38,7 @@ jobs:
           key: modules-${{ hashFiles('package-lock.json') }}
       - name: commitlint
         if: github.event_name == 'pull_request'
-        run: ls -la node_modules/.bin && npx commitlint
+        run: ls -la node_modules/.bin && echo $PATH && npx commitlint
           --from ${{ github.event.pull_request.base.sha }}
           --to ${{ github.event.pull_request.head.sha }}
           --verbose
